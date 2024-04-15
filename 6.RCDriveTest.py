@@ -53,3 +53,42 @@ except KeyboardInterrupt:
     print("Program terminated")
 finally:
     ser.close()
+
+
+# import serial
+# import time
+#
+# def setup_serial_connection(port='/dev/ttyACM0', baudrate=9600):
+#     try:
+#         ser = serial.Serial(port, baudrate)
+#         time.sleep(2)  # Allow some time for the Arduino to reset
+#         return ser
+#     except serial.SerialException as e:
+#         print(f"Failed to connect to Arduino on {port}: {str(e)}")
+#         return None
+#
+# def send_command(ser, steering, throttle):
+#     command = f"{steering},{throttle}\n"
+#     try:
+#         ser.write(command.encode('utf-8'))
+#         print(f"Command sent: {command}")
+#     except serial.SerialException as e:
+#         print(f"Failed to send command {command}: {str(e)}")
+#
+# def main():
+#     ser = setup_serial_connection()
+#     if ser is None:
+#         return
+#
+#     try:
+#         while True:
+#             # Sample command for testing
+#             send_command(ser, 90, 100)  # Neutral steering, forward throttle
+#             time.sleep(1)
+#     finally:
+#         if ser:
+#             ser.close()
+#             print("Serial connection closed.")
+#
+# if __name__ == "__main__":
+#     main()

@@ -98,3 +98,41 @@ while True:
 # Release everything if job is finished
 cap.release()
 cv2.destroyAllWindows()
+
+
+
+# import cv2
+# import numpy as np
+#
+# def main():
+#     cap = cv2.VideoCapture(0)
+#     orb = cv2.ORB_create()
+#     template_image = cv2.imread('template.jpg', cv2.IMREAD_GRAYSCALE)
+#     kp_template, des_template = orb.detectAndCompute(template_image, None)
+#
+#     while True:
+#         ret, frame = cap.read()
+#         if not ret:
+#             break
+#         kp_frame, des_frame = orb.detectAndCompute(frame, None)
+#         bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+#         matches = bf.match(des_template, des_frame)
+#         matches = sorted(matches, key=lambda x: x.distance)
+#
+#         # Assuming the calibration data and object size are known
+#         focal_length = 800  # Example focal length
+#         known_width = 24.0  # Known width of the object in cm
+#         if matches:
+#             object_width_in_frame = max([kp_frame[m.trainIdx].pt[0] for m in matches]) - min([kp_frame[m.trainIdx].pt[0] for m in matches])
+#             distance = (known_width * focal_length) / object_width_in_frame
+#             print(f"Distance to object: {distance} cm")
+#
+#         cv2.imshow('Frame', frame)
+#         if cv2.waitKey(1) & 0xFF == ord('q'):
+#             break
+#
+#     cap.release()
+#     cv2.destroyAllWindows()
+#
+# if __name__ == "__main__":
+#     main()

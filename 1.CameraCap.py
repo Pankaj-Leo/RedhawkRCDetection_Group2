@@ -41,3 +41,28 @@ while True:
 # When everything is done, release the capture
 cap.release()
 cv2.destroyAllWindows()
+
+#
+# import cv2
+#
+# def capture_video():
+#     cap = cv2.VideoCapture(0)  # Change the index for different cameras
+#     if not cap.isOpened():
+#         print("Error: Camera could not be opened.")
+#         return None
+#
+#     try:
+#         while True:
+#             ret, frame = cap.read()
+#             if not ret:
+#                 print("Error: Frame could not be read.")
+#                 break
+#             cv2.imshow("Video Capture", frame)
+#             if cv2.waitKey(1) & 0xFF == ord('q'):
+#                 break
+#     finally:
+#         cap.release()
+#         cv2.destroyAllWindows()
+#
+# if __name__ == "__main__":
+#     capture_video()

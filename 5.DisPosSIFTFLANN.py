@@ -72,3 +72,39 @@ if __name__ == "__main__":
 
 cap.release()
 cv2.destroyAllWindows()
+
+
+#
+#
+#
+# import cv2
+# import numpy as np
+#
+# def main():
+#     cap = cv2.VideoCapture(0)
+#     sift = cv2.SIFT_create()
+#     template_image = cv2.imread('template.jpg', cv2.IMREAD_GRAYSCALE)
+#     kp_template, des_template = sift.detectAndCompute(template_image, None)
+#     index_params = dict(algorithm=1, trees=5)
+#     search_params = dict(checks=50)
+#     flann = cv2.FlannBasedMatcher(index_params, search_params)
+#
+#     while True:
+#         ret, frame = cap.read()
+#         if not ret:
+#             break
+#         kp_frame, des_frame = sift.detectAndCompute(frame, None)
+#         matches = flann.knnMatch(des_template, des_frame, k=2)
+#
+#         good_matches = [m for m, n in matches if m.distance < 0.7 * n.distance]
+#         print(f"Number of good matches: {len(good_matches)}")
+#
+#         cv2.imshow('Frame', frame)
+#         if cv2.waitKey(1) & 0xFF == ord('q'):
+#             break
+#
+#     cap.release()
+#     cv2.destroyAllWindows()
+#
+# if __name__ == "__main__":
+#     main()

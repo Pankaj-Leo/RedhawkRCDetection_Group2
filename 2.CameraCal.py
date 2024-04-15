@@ -69,3 +69,34 @@ if objpoints and imgpoints:
     print(f"Total reprojection error: {mean_error / len(objpoints)}")
 else:
     print("Not enough images with detected chessboard corners for calibration.")
+
+
+
+#
+# import cv2
+# import numpy as np
+# import glob
+#
+# def calibrate_camera():
+#     # Prepare object points 0, 1, 2, ..., 6
+#     objp = np.zeros((6*9, 3), np.float32)
+#     objp[:,:2] = np.mgrid[0:9, 0:6].T.reshape(-1, 2)
+#
+#     objpoints = []  # 3d points in real world space
+#     imgpoints = []  # 2d points in image plane.
+#
+#     images = glob.glob('calibration_images/*.jpg')
+#     for fname in images:
+#         img = cv2.imread(fname)
+#         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+#         ret, corners = cv2.findChessboardCorners(gray, (9, 6), None)
+#         if ret:
+#             objpoints.append(objp)
+#             imgpoints.append(corners)
+#
+#     ret, mtx, dist, rvecs, thees = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
+#     print(f"Camera matrix:\n{mtx}\nDistortion coefficients:\n{dist}")
+#     return mtx, dist
+#
+# if __name__ == "__main__":
+#     calibrate_camera()

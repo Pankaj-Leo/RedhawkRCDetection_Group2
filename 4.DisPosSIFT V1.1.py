@@ -86,3 +86,38 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
+
+
+
+# import cv2
+# import numpy as np
+#
+# def main():
+#     cap = cv2.VideoCapture(0)
+#     sift = cv2.SIFT_create()
+#     template_image = cv2.imread('template.jpg', cv2.IMREAD_GRAYSCALE)
+#     kp_template, des_template = sift.detectAndCompute(template_image, None)
+#
+#     while True:
+#         ret, frame = cap.read()
+#         if not ret:
+#             break
+#         kp_frame, des_frame = sift.detectAndCompute(frame, None)
+#         bf = cv2.BFMatcher()
+#         matches = bf.knnMatch(des_template, des_frame, k=2)
+#
+#         good_matches = [m for m, n in matches if m.distance < 0.75 * n.distance]
+#         if good_matches:
+#             distances = [m.distance for m in good_matches]
+#             average_distance = sum(distances) / len(distances)
+#             print(f"Average distance of matches: {average_distance}")
+#
+#         cv2.imshow('Frame', frame)
+#         if cv2.waitKey(1) & 0xFF == ord('q'):
+#             break
+#
+#     cap.release()
+#     cv2.destroyAllWindows()
+#
+# if __name__ == "__main__":
+#     main()

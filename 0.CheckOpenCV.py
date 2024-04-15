@@ -1,8 +1,16 @@
 import cv2
-from imageio.plugins import opencv
 
-# Print OpenCV version
-print(cv2.__version__)
+def check_opencv():
+    # Check OpenCV version
+    print(f"Installed OpenCV version: {cv2.__version__}")
+    required_version = "4.5.2"  # Specify the version you are working with
+    if cv2.__version__ == required_version:
+        print(f"Correct OpenCV version is installed: {cv2.__version__}")
+    else:
+        print(f"Update OpenCV to the required version: {required_version}")
+
+if __name__ == "__main__":
+    check_opencv()
 
 
 #%%
