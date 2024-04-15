@@ -1,77 +1,68 @@
 import cv2
 import numpy as np
 
-# Initialize the AKAZE detector
-akaze = cv2.AKAZE_create(threshold=0.001, nOctaves=4, nOctaveLayers=4, diffusivity=cv2.KAZE_DIFF_PM_G2)
+def load_calibration_data(file_path):
+    """Load camera calibration data from a .npz file."""
+    data = np.load(file_path)
+    return data['mtx'], data['dist']
 
+def initialize_video_capture():
+    """Initialize the video capture object with high resolution."""
+    cap = cv2.VideoCapture(0)
+    # Attempt to set a high resolution for long-distance feature detection
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    if not cap.isOpened():
+        raise IOError("Cannot open webcam")
+    return cap
 
-# Load the template image and convert it to grayscale
-template_image = cv2.imread('Redhawk.png', 0)
-# Detect keypoints and descriptors in the template image
-kp_template, desc_template = akaze.detectAndCompute(template_image, None)
+def adjust_akaze_parameters():
+    """Adjust AKAZE parameters for better long-range detection."""
+    # Increase the threshold to be more selective in feature detection
+    # Adjust the number of octaves and octave layers for larger range images
+    return cv2.AKAZE_create(threshold=0.0001, nOctaves=6, nOctaveLayers=6, diffusivity=cv2.KAZE_DIFF_PM_G2)
 
-# Define the video capture object
-cap = cv2.VideoCapture(0)
+def find_features_and_calculate_metrics(frame, akaze, bf, kp_template, desc_template, camera_matrix, object_width_world):
+    """Detect features, match them, and calculate distance and angle."""
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    kp_frame, desc_frame = akaze.detectAndCompute(gray_frame, None)
+    matches = bf.match(desc_template, desc_frame)
+    matches = sorted(matches, key=lambda x: x.distance)
 
-# Set the resolution to 1920x1080
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-
-# Define the brute-force matcher
-bf = cv2.BFMatcher(cv2.DescriptorMatcher_BRUTEFORCE_HAMMING)
-
-# Counter for the frames
-frame_counter = 0
-# Specify the interval for frame processing (n)
-frame_interval = 10  # Change n to your desired interval
-
-while True:
-    # Read the current frame from the video capture object
-    ret, frame = cap.read()
-
-    # Increment the frame counter
-    frame_counter += 1
-
-    # Process the frame when frame_counter reaches the interval, then reset the counter
-    if frame_counter == frame_interval:
-        # Convert the frame to grayscale
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # Detect keypoints and descriptors in the current frame
-        kp_frame, desc_frame = akaze.detectAndCompute(gray_frame, None)
-        
-        # Match descriptors between the template image and the current frame
-        matches = bf.match(desc_template, desc_frame)
-        # Sort the matches based on their distance (the lower the better)
-        matches = sorted(matches, key=lambda x: x.distance)
-        
-        # Extract the coordinates of matched keypoints in the template image and the current frame
+    if len(matches) > 10:
         src_pts = np.float32([kp_template[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp_frame[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-        
-        # Estimate the homography matrix
-        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-        
-        # Get the height and width of the template image
-        h, w = template_image.shape
-        # Define the points of the template image corners
-        pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-        # Project the corners into the current frame using the homography matrix
-        dst = cv2.perspectiveTransform(pts, M)
-        
-        # Draw a bounding box around the detected object
-        frame = cv2.polylines(frame, [np.int32(dst)], True, (0, 255, 0), 3, cv2.LINE_AA)
+        object_width_pixels = max(dst_pts[:, 0]) - min(dst_pts[:, 0])
+        distance, angle = calculate_distance_and_angle(object_width_pixels, object_width_world, camera_matrix[0, 0])
+        return distance, angle, src_pts, dst_pts
+    return None, None, None, None
 
-        # Reset the counter
-        frame_counter = 0
+def main():
+    mtx, dist = load_calibration_data('calibration_data.npz')
+    cap = initialize_video_capture()
+    akaze = adjust_akaze_parameters()
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
+    template_image = cv2.imread('Redhawk.png', cv2.IMREAD_GRAYSCALE)
+    kp_template, desc_template = akaze.detectAndCompute(template_image, None)
 
-    # Display the frame
-    cv2.imshow('Frame', frame)
-    
-    # Exit loop if 'q' is pressed
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    object_width_world = 200  # mm, known width of the object
 
-# Release the video capture object and close all windows
-cap.release()
-cv2.destroyAllWindows()
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            distance, angle, src_pts, dst_pts = find_features_and_calculate_metrics(frame, akaze, bf, kp_template, desc_template, mtx, object_width_world)
+            if distance is not None:
+                print(f"Distance to object: {distance:.2f} mm, Angle: {angle:.2f} degrees")
+
+            cv2.imshow('Frame', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()

@@ -1,111 +1,100 @@
 import numpy as np
 import cv2
 
-# Function to determine if the object is on the left or right side of the screen
-def left_or_right(frame_width, dst):
-    # Calculate the centroid of the quadrilateral
-    centroid_x = np.mean(dst[:, 0, 0])
-    # Determine the side based on the centroid's x-coordinate
+def left_or_right(frame_width, centroid_x):
+    """Determine if the object's centroid is on the left or right side of the screen."""
     if centroid_x > frame_width / 2:
         return "Right"
-    elif centroid_x < frame_width / 2:
+    else:
         return "Left"
-    
-# Function to calculate the horizontal distance to the midline
-def distance_to_midline(frame_width, dst):
-    # Calculate the centroid of the quadrilateral
-    centroid_x = np.mean(dst[:, 0, 0])
-    # Calculate the distance to the midline
-    distance = np.abs(centroid_x - frame_width / 2)
-    return distance
 
-# Load previously saved data from the .npz file
-with np.load('calibration_data.npz') as X:
-    camera_matrix, dist_coeffs = [X[i] for i in ('mtx', 'dist')]
+def distance_to_midline(frame_width, centroid_x):
+    """Calculate the horizontal distance of the object's centroid to the midline of the frame."""
+    return abs(centroid_x - frame_width / 2)
+
+# Load previously saved calibration data
+calibration_data = np.load('calibration_data.npz')
+mtx, dist = calibration_data['mtx'], calibration_data['dist']
 
 # Initialize the ORB detector
 orb = cv2.ORB_create(nfeatures=650)
 
-# Load the template image
-template_image = cv2.imread('Redhawk.png', 0)  # Ensure the image is grayscale
+# Load the template image and check if it is loaded correctly
+template_image_path = 'Redhawk.png'
+template_image = cv2.imread(template_image_path, 0)
 if template_image is None:
-    raise ValueError("Template image not found")
+    raise ValueError(f"Error: Template image not found at path '{template_image_path}'.")
 
+# Detect keypoints and descriptors in the template image
 kp_template, desc_template = orb.detectAndCompute(template_image, None)
 
-# Capture video stream from the webcam
-video = cv2.VideoCapture(0)
-# Set the resolution to a certain resolution
-video.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-video.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+# Set up video capture
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    raise ValueError("Error: Could not open video device.")
 
-# Known dimensions of the object (letter-size paper in inches)
-object_height = 250  # letter size paper in mm
+# Set the resolution
+desired_width, desired_height = 1280, 720
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, desired_width)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, desired_height)
 
-# Focal length (fy from the camera matrix since we are using the height)
-focal_length = camera_matrix[1, 1]
+# Known dimensions of the object (e.g., in mm)
+object_height = 250
 
-# Counter for the frames
-frame_counter = 0
-# Specify the interval for frame processing
-frame_interval = 5  # Process every 5 frames
+# Focal length (from the camera matrix)
+focal_length = mtx[1, 1]
 
-# Main loop for video processing
+# Frame processing loop
 while True:
-    ret, frame = video.read()
+    ret, frame = cap.read()
     if not ret:
-        break
-    
-    # Increment the frame counter
-    frame_counter += 1
-
-    # Process the frame when frame_counter reaches the interval
-    if frame_counter == frame_interval:
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        kp_frame, desc_frame = orb.detectAndCompute(gray_frame, None)
-
-        # Feature matching (FLANN based matcher could also be used)
-        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-        matches = bf.match(desc_template, desc_frame)
-        matches = sorted(matches, key=lambda x: x.distance)
-
-        # Homography estimation
-        if len(matches) > 3:
-            src_pts = np.float32([kp_template[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
-            dst_pts = np.float32([kp_frame[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-            
-            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 3.0)
-            
-            if M is not None:
-                h, w = template_image.shape
-                pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-                dst = cv2.perspectiveTransform(pts, M)
-                
-                frame = cv2.polylines(frame, [np.int32(dst)], True, (0, 255, 0), 3, cv2.LINE_AA)
-                
-                # Height of the object in pixels
-                object_height_pixels = np.linalg.norm(dst[0] - dst[1])
-                
-                # Distance estimation
-                distance = (object_height * focal_length) / object_height_pixels
-                print(f"Estimated distance: {distance:.2f} mm; ")
-                # Calculate the position and distance to midline after finding the object
-                position = left_or_right(frame.shape[1], dst)
-                midline_distance = distance_to_midline(frame.shape[1], dst)
-    
-                print(f"Object is on the: {position} side; ")
-                print(f"Horizontal distance to midline: {midline_distance:.2f} pixels")
-        
-        # Reset the counter
-        frame_counter = 0
-    
-    cv2.imshow('ESC or Q for Exit', frame)
-    
-    # Exit loop if 'q' or 'Q' or 'ESC' is pressed
-    key = cv2.waitKey(1) & 0xFF
-    if key == 27 or key == ord('q') or key == ord('Q'):
+        print("Error: Can't receive frame (stream end?). Exiting ...")
         break
 
-# Release the video capture object and close all windows
-video.release()
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    kp_frame, desc_frame = orb.detectAndCompute(gray_frame, None)
+
+    # Feature matching
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(desc_template, desc_frame)
+    matches = sorted(matches, key=lambda x: x.distance)
+
+    # Proceed if we have enough matches
+    if len(matches) > 10:
+        # Estimate homography between template and scene
+        src_pts = np.float32([kp_template[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
+        dst_pts = np.float32([kp_frame[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+
+        if M is not None:
+            # Project the template's corners into the scene
+            h, w = template_image.shape
+            pts = np.float32([[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
+            dst = cv2.perspectiveTransform(pts, M)
+
+            # Draw the bounding box
+            frame = cv2.polylines(frame, [np.int32(dst)], True, 255, 3, cv2.LINE_AA)
+
+            # Calculate centroid of the bounding box
+            centroid_x = np.mean(dst[:, 0, 0])
+
+            # Distance and position calculation
+            distance = (object_height * focal_length) / cv2.norm(dst[0] - dst[1])
+            position = left_or_right(frame_width=frame.shape[1], centroid_x=centroid_x)
+            midline_distance = distance_to_midline(frame_width=frame.shape[1], centroid_x=centroid_x)
+
+            print(f"Estimated distance: {distance:.2f} mm; Object is on the: {position}; "
+                  f"Horizontal distance to midline: {midline_distance:.2f} pixels")
+    else:
+        print("Not enough matches found - %d/%d" % (len(matches), 10))
+
+    # Display the resulting frame
+    cv2.imshow('Frame', frame)
+
+    # Break the loop with 'q'
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release everything if job is finished
+cap.release()
 cv2.destroyAllWindows()

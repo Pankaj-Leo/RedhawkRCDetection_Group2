@@ -1,127 +1,74 @@
-import numpy as np
-import cv2
+import serial
+import time
+import serial.tools.list_ports
 
-# Function to determine if the object is on the left or right side of the screen
-def left_or_right(frame_width, dst):
-    # Calculate the centroid of the quadrilateral
-    centroid_x = np.mean(dst[:, 0, 0])
-    # Determine the side based on the centroid's x-coordinate
-    if centroid_x > frame_width / 2:
-        return "Right"
-    elif centroid_x < frame_width / 2:
-        return "Left"
-    
-# Function to calculate the horizontal distance to the midline
-def distance_to_midline(frame_width, dst):
-    # Calculate the centroid of the quadrilateral
-    centroid_x = np.mean(dst[:, 0, 0])
-    # Calculate the distance to the midline
-    distance = np.abs(centroid_x - frame_width / 2)
-    return distance
+def find_arduino_port():
+    """Scan for an Arduino connected and return its port."""
+    ports = list(serial.tools.list_ports.comports())
+    for p in ports:
+        if 'Arduino' in p.description or 'arduino' in p.description:
+            print(f"Arduino found on port {p.device}")
+            return p.device
+    return None
 
-# Load previously saved data from the .npz file
-with np.load('calibration_data.npz') as X:
-    camera_matrix, dist_coeffs = [X[i] for i in ('mtx', 'dist')]
+def send_command(ser, steering, velocity):
+    """Send a steering and velocity command to the Arduino."""
+    command = f"{steering},{velocity}\n"
+    try:
+        ser.write(command.encode('utf-8'))
+    except serial.SerialException as e:
+        print(f"Error sending command: {e}")
 
-# Initialize the SIFT detector
-sift = cv2.SIFT_create()
+def main():
+    arduino_port = find_arduino_port()
 
-# Load the template image
-template_image = cv2.imread('Redhawk.png', 0)  # Ensure the image is grayscale
-if template_image is None:
-    raise ValueError("Template image not found")
+    if arduino_port is None:
+        print("Arduino not found. Please check your connection.")
+        return
 
-kp_template, desc_template = sift.detectAndCompute(template_image, None)
+    try:
+        with serial.Serial(arduino_port, 9600, timeout=1) as ser:
+            print(f"Connected to Arduino on {arduino_port}")
+            time.sleep(2)  # give some time for the Arduino to reset
 
-# Initialize the camera
-video = cv2.VideoCapture(0)  # '0' is the default value for the primary camera
+            counter = 1
+            while True:
+                print("Test: ", counter)
+                # Forward
+                send_command(ser, 90, 100)
+                print("Forward")
+                time.sleep(2)
 
-# Set the resolution
-desired_width = 640
-desired_height = 480
-video.set(cv2.CAP_PROP_FRAME_WIDTH, desired_width)
-video.set(cv2.CAP_PROP_FRAME_HEIGHT, desired_height)
+                # Turn left
+                send_command(ser, 45, 100)
+                print("Turn Left")
+                time.sleep(2)
 
-# Known dimensions of the object (letter-size paper in inches)
-object_height = 250  # letter size paper in mm
+                # Turn right
+                send_command(ser, 135, 100)
+                print("Turn Right")
+                time.sleep(2)
 
-# Focal length (fy from the camera matrix since we are using the height)
-focal_length = camera_matrix[1, 1]
+                # Stop
+                send_command(ser, 90, 0)
+                print("Stop")
+                time.sleep(2)
 
-# Counter for the frames
-frame_counter = 0
-# Specify the interval for frame processing
-frame_interval = 5  # Process every 5 frames
-# Define a variable to store the last drawing box coordinates
-last_box = None
+                counter += 1
 
-# Main loop for video processing
-while True:
-    ret, frame = video.read()
-    if not ret:
-        break
-    
-    # Increment the frame counter
-    frame_counter += 1    
-    # Process the frame when frame_counter reaches the interval
-    if frame_counter == frame_interval:
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        kp_frame, desc_frame = sift.detectAndCompute(gray_frame, None)
+    except serial.SerialException as e:
+        print(f"Serial communication error: {e}")
+    except KeyboardInterrupt:
+        print("Program terminated by user.")
+    finally:
+        if 'ser' in locals() and ser.is_open:
+            send_command(ser, 90, 0)  # send stop command
+            ser.close()
+            print("Serial connection closed.")
 
-        # FLANN parameters and matcher initialization
-        FLANN_INDEX_KDTREE = 1
-        index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-        search_params = dict(checks=50)  # or pass an empty dictionary
-        flann = cv2.FlannBasedMatcher(index_params, search_params)
-        # Feature matching
-        matches = flann.knnMatch(desc_template, desc_frame, k=2)
-        # Extract good matches for Homography
-        good_matches = []
-        for m, n in matches:
-            if m.distance < 0.7 * n.distance:
-                good_matches.append(m)
+if __name__ == "__main__":
+    main()
 
-        # Homography estimation
-        if len(good_matches) > 3:
-            src_pts = np.float32([kp_template[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-            dst_pts = np.float32([kp_frame[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
 
-            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 3.0)
-            
-            if M is not None:
-                h, w = template_image.shape
-                pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-                dst = cv2.perspectiveTransform(pts, M)
-                last_box = dst  # Update last box coordinates
-                
-                #frame = cv2.polylines(frame, [np.int32(dst)], True, (0, 255, 0), 3, cv2.LINE_AA)
-                
-                # Height of the object in pixels
-                object_height_pixels = np.linalg.norm(dst[0] - dst[1])
-                
-                # Distance estimation
-                distance = (object_height * focal_length) / object_height_pixels
-                print(f"Estimated distance: {distance:.2f} mm; ")
-                # Calculate the position and distance to midline after finding the object
-                position = left_or_right(frame.shape[1], dst)
-                midline_distance = distance_to_midline(frame.shape[1], dst)
-    
-                print(f"Object is on the: {position} side; ")
-                print(f"Horizontal distance to midline: {midline_distance:.2f} pixels")
-        
-        # Reset the counter
-        frame_counter = 0
-    
-    if last_box is not None:  # Draw the last detected box
-        frame = cv2.polylines(frame, [np.int32(last_box)], True, (0, 255, 0), 3, cv2.LINE_AA)
-    
-    cv2.imshow('ESC or Q for Exit', frame)
-    
-    # Exit loop if 'q' or 'Q' or 'ESC' is pressed
-    key = cv2.waitKey(1) & 0xFF
-    if key == 27 or key == ord('q') or key == ord('Q'):
-        break
-
-# Release the video capture object and close all windows
-video.release()
+cap.release()
 cv2.destroyAllWindows()

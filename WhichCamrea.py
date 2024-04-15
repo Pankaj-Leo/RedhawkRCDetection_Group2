@@ -23,3 +23,7 @@ if cameras:
         print(f"Index: {index}, Name/Make: {name}")
 else:
     print("No cameras detected.")
+
+#%%
+
+#%%
